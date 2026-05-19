@@ -98,6 +98,14 @@ Run behind a reverse proxy (nginx, caddy) for TLS and rate limiting.
 
 ---
 
+## Source directory is read-only
+
+avifeed treats `sourceDir` as a strictly **read-only** input. The server only `stat`s, reads, and watches files there — it never creates, renames, deletes, or modifies source files. All writes go to `optimizedDir` and `manifestPath`.
+
+This is enforced at runtime, not just by convention. Every filesystem write in the codebase goes through a small wrapper (`src/safefs.ts`) that resolves the target path and rejects it with `EWRITEFORBIDDEN` unless it sits under one of the writable roots registered at startup (`optimizedDir` and the directory containing `manifestPath`). A future code change that accidentally tries to write inside `sourceDir` will throw immediately rather than silently mutate your originals.
+
+---
+
 ## Why AVIF?
 
 AVIF (AV1 Image File Format) is the most efficient widely-supported image format today:
@@ -124,6 +132,7 @@ src/
   optimizer.ts    serial encode queue with abort support
   bootstrap.ts    startup reconciliation
   server.ts       fastify routes
+  safefs.ts       write-path guard — refuses writes outside writable roots
 deploy/
   avifeed.service systemd unit
   README.md       deployment guide

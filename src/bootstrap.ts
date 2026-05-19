@@ -4,6 +4,7 @@ import { log } from './log.js';
 import { AssetManifest } from './manifest.js';
 import { ImageOptimizer } from './optimizer.js';
 import { shouldHandle } from './watcher.js';
+import * as safefs from './safefs.js';
 import type { ServerConfig } from './config.js';
 
 export async function bootstrap(
@@ -37,7 +38,7 @@ export async function bootstrap(
       manifest.removeBySourcePath(entry.sourcePath);
       // Also delete the optimized file
       try {
-        fs.unlinkSync(path.join(cfg.optimizedDir, entry.optimizedFilename));
+        safefs.unlinkSync(path.join(cfg.optimizedDir, entry.optimizedFilename));
         log.info({ file: entry.optimizedFilename }, 'Deleted optimized file for removed source');
       } catch { /* already gone */ }
     }

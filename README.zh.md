@@ -98,6 +98,14 @@ npm start
 
 ---
 
+## 源目录是只读的
+
+avifeed 把 `sourceDir` 当作严格**只读**输入：服务端只对源目录里的文件做 `stat`、读取、监听，**绝不会**创建、重命名、删除或修改源文件。所有写操作都只发生在 `optimizedDir` 和 `manifestPath` 上。
+
+这一约束不只是口头约定，而是在运行时强制执行的。代码里所有文件系统写操作都走一个小封装（`src/safefs.ts`），它会解析目标路径，如果不在启动时登记的可写根目录（`optimizedDir` 以及 `manifestPath` 所在目录）下，会直接抛出 `EWRITEFORBIDDEN` 错误。今后哪怕有人改错代码、不小心把写操作指向了 `sourceDir`，也会立即报错，不会悄悄破坏你的原图。
+
+---
+
 ## 为什么用 AVIF？
 
 AVIF（AV1 图像文件格式）是目前主流浏览器中压缩率最高的图片格式：
@@ -124,6 +132,7 @@ src/
   optimizer.ts    串行编码队列，支持 abort
   bootstrap.ts    启动期清理与扫描
   server.ts       fastify 路由
+  safefs.ts       写路径守卫，拒绝写入可写根之外的位置
 deploy/
   avifeed.service systemd unit
   README.md       部署指南

@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import path from 'node:path';
 import { loadConfig } from './config.js';
 import { AssetManifest } from './manifest.js';
@@ -7,9 +6,14 @@ import { FileWatcher } from './watcher.js';
 import { bootstrap } from './bootstrap.js';
 import { buildServer } from './server.js';
 import { log } from './log.js';
+import * as safefs from './safefs.js';
 
 async function main() {
   const cfg = loadConfig();
+
+  // Register writable roots BEFORE any module performs filesystem writes.
+  // This enforces the invariant that the source directory is read-only.
+  safefs.initSafeFs([cfg.optimizedDir, path.dirname(cfg.manifestPath)]);
 
   const manifest = new AssetManifest(cfg.manifestPath);
   const optimizer = new ImageOptimizer(cfg, manifest);
@@ -24,7 +28,7 @@ async function main() {
     const entry = manifest.getBySourcePath(sourcePath);
     if (entry) {
       const optimizedPath = path.join(cfg.optimizedDir, entry.optimizedFilename);
-      try { fs.unlinkSync(optimizedPath); } catch { /* already gone */ }
+      try { safefs.unlinkSync(optimizedPath); } catch { /* already gone */ }
       log.info({ file: entry.optimizedFilename }, 'Deleted optimized file for removed source');
     }
     manifest.removeBySourcePath(sourcePath);

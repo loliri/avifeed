@@ -6,7 +6,7 @@
   "avifQuality": 50,
   "avifEffort": 4,
   "watch": true,
-  "scanOnStart": false,
+  "scanOnStart": true,
   "asyncIo": false,
   "stabilizeMs": 200,
   "stabilizePollMs": 50,

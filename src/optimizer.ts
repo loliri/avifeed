@@ -5,6 +5,7 @@ import sharp from 'sharp';
 import { contentHash } from './hash.js';
 import { AssetManifest } from './manifest.js';
 import { log } from './log.js';
+import * as safefs from './safefs.js';
 import type { ServerConfig } from './config.js';
 
 interface PendingJob {
@@ -94,20 +95,20 @@ export class ImageOptimizer {
     const tmp = optimizedPath + `.tmp.${process.pid}.${Math.random().toString(36).slice(2)}`;
     try {
       if (this.cfg.asyncIo) {
-        await fsp.writeFile(tmp, avifBytes);
-        if (signal?.aborted) { await fsp.unlink(tmp).catch(() => {}); return null; }
-        await fsp.rename(tmp, optimizedPath);
+        await safefs.writeFile(tmp, avifBytes);
+        if (signal?.aborted) { await safefs.unlink(tmp).catch(() => {}); return null; }
+        await safefs.rename(tmp, optimizedPath);
       } else {
-        fs.writeFileSync(tmp, avifBytes);
-        if (signal?.aborted) { fs.unlinkSync(tmp); return null; }
-        fs.renameSync(tmp, optimizedPath);
+        safefs.writeFileSync(tmp, avifBytes);
+        if (signal?.aborted) { safefs.unlinkSync(tmp); return null; }
+        safefs.renameSync(tmp, optimizedPath);
       }
     } catch (err) {
       log.error({ err, sourcePath, tmp }, 'Failed to write optimized file');
       if (this.cfg.asyncIo) {
-        await fsp.unlink(tmp).catch(() => {});
+        await safefs.unlink(tmp).catch(() => {});
       } else {
-        try { fs.unlinkSync(tmp); } catch { /* ignore */ }
+        try { safefs.unlinkSync(tmp); } catch { /* ignore */ }
       }
       return null;
     }
@@ -126,9 +127,9 @@ export class ImageOptimizer {
     if (prev && prev.optimizedFilename !== optimizedFilename) {
       const stalePath = path.join(this.cfg.optimizedDir, prev.optimizedFilename);
       if (this.cfg.asyncIo) {
-        await fsp.unlink(stalePath).catch(() => {});
+        await safefs.unlink(stalePath).catch(() => {});
       } else {
-        try { fs.unlinkSync(stalePath); } catch { /* already gone */ }
+        try { safefs.unlinkSync(stalePath); } catch { /* already gone */ }
       }
       log.info({ file: prev.optimizedFilename }, 'Removed stale optimized file for re-encoded source');
     }

@@ -1,6 +1,5 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import { log } from './log.js';
+import * as safefs from './safefs.js';
 
 export interface ManifestEntry {
   sourcePath: string;
@@ -154,12 +153,12 @@ export class AssetManifest {
   persistSync(): void {
     const tmp = this.manifestPath + '.tmp';
     try {
-      fs.writeFileSync(tmp, JSON.stringify(this.toJSON(), null, 2), 'utf8');
-      fs.renameSync(tmp, this.manifestPath);
+      safefs.writeFileSync(tmp, JSON.stringify(this.toJSON(), null, 2), 'utf8');
+      safefs.renameSync(tmp, this.manifestPath);
       log.debug({ path: this.manifestPath, entries: this.entries.length }, 'Manifest persisted');
     } catch (err) {
       log.error({ err, path: this.manifestPath }, 'Failed to persist manifest');
-      try { fs.unlinkSync(tmp); } catch { /* ignore */ }
+      try { safefs.unlinkSync(tmp); } catch { /* ignore */ }
     }
   }
 
