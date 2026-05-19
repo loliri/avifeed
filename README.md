@@ -2,7 +2,14 @@
 
 📖 README: **English** | **[简体中文](README.zh.md)**
 
-**avifeed** is a Node.js HTTP server that watches a directory of images, automatically re-encodes them to [AVIF](https://aomediacodec.github.io/av1-avif/), and serves a random one on every request.
+**avifeed** turns a folder of images into a low-bandwidth random-image endpoint. Drop originals in; the server transcodes them to AVIF in the background, keeps itself in sync as files come and go, and serves a different one on every `GET /` — at a fraction of the bytes.
+
+What makes it different from a one-line "pick a random file" script:
+
+- **Automatic AVIF compression.** Every image is re-encoded with sharp + libvips, typically **70–80 % smaller** than the original JPEG/PNG, with no visible quality loss. You upload originals; visitors get AVIF.
+- **Self-syncing.** A file watcher tracks adds, edits, and deletions in the source folder in real time. Re-encoding is debounced against half-written uploads, deduped against in-flight jobs, and persisted atomically — so the manifest and disk never disagree even after a crash.
+- **Source files are protected by design.** `sourceDir` is treated as strictly read-only. Every filesystem write in the codebase goes through a guard (`src/safefs.ts`) that hard-fails any write outside the registered output roots. Your originals cannot be touched, even by a buggy future change.
+- **Cache-friendly delivery.** Output filenames embed a content hash, so `/images/<name>.<hash>.avif` can be served with a 1-year `immutable` cache. `GET /` returns a fresh random pick on every call; `GET /?redirect=1` issues a 302 to the stable URL so browsers can cache the bytes.
 
 ---
 
@@ -15,8 +22,9 @@
 - ETag + `Cache-Control: immutable` on `/images/:filename`
 - File watcher (chokidar) picks up additions, changes, and deletions in real time
 - Manifest persisted to disk atomically — survives restarts without re-encoding
+- Source directory is read-only at runtime, enforced by a write-path guard
 - `/healthz`, `/readyz`, `/metrics` endpoints out of the box
-- Graceful shutdown: drains the encode queue before exiting
+- Graceful shutdown: drains the encode queue before exiting (with a 10 s hard timeout)
 - Configurable via `config.json` and `RIS_*` environment variables
 
 ---
@@ -78,6 +86,27 @@ Copy `config.example.json` to `config.json` and edit. Every field also has an `R
 | _(env only)_ | `RIS_LOG_LEVEL` | `info` | pino log level |
 | _(env only)_ | `RIS_CONFIG` | `./config.json` | Path to config file |
 
+### `scanOnStart` in detail
+
+This flag controls **whether `sourceDir` is scanned at startup**. It does *not* affect the manifest reconciliation against `optimizedDir`, which always runs.
+
+On every startup, regardless of `scanOnStart`:
+
+- The manifest is loaded from disk.
+- `optimizedDir` is reconciled with the manifest in both directions:
+  - manifest entry whose AVIF file is missing → entry is dropped;
+  - AVIF file on disk that has no manifest entry → file is deleted.
+- `sourceDir` is **not** read or stat'd — it is left completely untouched. (Useful if `sourceDir` lives on a slow / removable / network volume that may not be ready at boot.)
+
+When `scanOnStart=true`, additionally:
+
+- `sourceDir` is listed and each image file is `stat`'d.
+- Any file that is new, or whose size/mtime differs from the manifest, is enqueued for encoding.
+
+When `scanOnStart=false` (default):
+
+- `sourceDir` is never touched at startup. The watcher is solely responsible for picking up changes once the server is running. Files added while the server was down will not be processed until they are touched again.
+
 ---
 
 ## Deployment
@@ -90,7 +119,7 @@ Run behind a reverse proxy (nginx, caddy) for TLS and rate limiting.
 
 ## How it works
 
-1. **Bootstrap** — loads the manifest, removes entries whose optimized file is gone, cleans up entries whose source was deleted. Optionally scans the full source directory.
+1. **Bootstrap** — loads the manifest, then reconciles `optimizedDir` against it: drops manifest entries whose AVIF is gone, deletes AVIF files that the manifest doesn't know about. If `scanOnStart=true`, additionally scans `sourceDir` for new or changed files and enqueues them.
 2. **Watch** — chokidar monitors the source directory (non-recursive). Only recognised image extensions are processed; hidden files and temp files are ignored.
 3. **Stabilize** — before encoding, the optimizer polls the file size until it stays constant for `stabilizeMs` ms, avoiding reads on half-written uploads.
 4. **Encode** — sharp converts the source to AVIF and writes it atomically (temp file → rename). If the same source file changes again while encoding, the in-flight job is aborted and a new one is queued.

@@ -2,7 +2,14 @@
 
 📖 README: **[English](README.md)** | **简体中文**
 
-**avifeed** 是一个 Node.js HTTP 服务器，监听一个图片目录，自动把图片转码为 [AVIF](https://aomediacodec.github.io/av1-avif/) 格式，每次请求随机返回一张。
+**avifeed** 把一个图片目录变成一个低带宽的随机图接口。把原图扔进目录，服务端会在后台自动转码成 AVIF，实时跟随文件增删保持同步，每次 `GET /` 随机返回一张——以远小于原图的字节数。
+
+它和"随便挑一个文件返回"的一行脚本最大的区别：
+
+- **自动 AVIF 压缩**：每张图都用 sharp + libvips 重编码，相比 JPEG/PNG 通常能小 **70–80%**，肉眼看不出质量差。你上传原图，访客拿到的是 AVIF。
+- **自动同步**：文件监听实时跟踪源目录的新增、修改、删除。编码会去抖避开半写状态的文件、对同一文件的并发任务自动去重、manifest 原子落盘——崩溃也不会让磁盘和清单不一致。
+- **源文件天然受保护**：`sourceDir` 被当作严格只读。代码里所有写文件操作都走一个守卫（`src/safefs.ts`），目标只要不在登记的输出目录之内就直接抛错。哪怕将来代码出 bug，也碰不到你的原图。
+- **缓存友好**：输出文件名带内容哈希，`/images/<name>.<hash>.avif` 可以加一年 `immutable` 缓存头。`GET /` 每次返回一张新随机图；`GET /?redirect=1` 302 跳到稳定 URL，让浏览器把字节缓存下来。
 
 ---
 
@@ -15,8 +22,9 @@
 - `/images/:filename` 带 ETag 和 `Cache-Control: immutable`
 - chokidar 实时监听文件的新增、修改、删除
 - manifest 原子写盘，重启不需要重新编码
+- 源目录运行时只读，由写路径守卫强制
 - 内置 `/healthz`、`/readyz`、`/metrics` 端点
-- 优雅关闭：退出前 drain 编码队列
+- 优雅关闭：退出前 drain 编码队列（带 10 秒强退兜底）
 - 支持 `config.json` 和 `RIS_*` 环境变量配置
 
 ---
@@ -78,6 +86,27 @@ npm start
 | _（仅环境变量）_ | `RIS_LOG_LEVEL` | `info` | pino 日志级别 |
 | _（仅环境变量）_ | `RIS_CONFIG` | `./config.json` | 配置文件路径 |
 
+### `scanOnStart` 详解
+
+这个开关只控制**启动时是否扫描 `sourceDir`**，不影响 manifest 与 `optimizedDir` 的对账——后者无论开关如何始终都会执行。
+
+每次启动，无论 `scanOnStart` 是什么值：
+
+- 都会从磁盘读取 manifest。
+- 都会双向对账 `optimizedDir`：
+  - manifest 里有记录但 AVIF 文件已不存在 → 删该条记录；
+  - `optimizedDir` 里有 AVIF 文件但 manifest 没记录 → 删该 AVIF 文件。
+- **完全不读、不 stat、不碰 `sourceDir`**。（这点对源目录在慢速磁盘 / 可移动盘 / 网络盘上、启动时可能还没就绪的场景很有用。）
+
+`scanOnStart=true` 时，额外执行：
+
+- 列出 `sourceDir` 下所有图片文件并 `stat` 一遍。
+- 凡是 manifest 里没有的、或者大小/修改时间和 manifest 记录不一致的文件，都入队等待编码。
+
+`scanOnStart=false`（默认）时：
+
+- 启动期完全不碰 `sourceDir`。服务运行起来后，新增/变更只能靠 watcher 捕获。**服务停机期间放进去的文件**不会被自动处理，需要再次 touch（修改）一下才会触发编码。
+
 ---
 
 ## 部署
@@ -90,7 +119,7 @@ npm start
 
 ## 工作原理
 
-1. **启动清理**：读取 manifest，删除优化文件已不存在的条目，清理源文件已删除的条目。`scanOnStart=true` 时完整扫描源目录。
+1. **启动清理**：读取 manifest，与 `optimizedDir` 双向对账：删掉 AVIF 已不存在的 manifest 条目，删掉 manifest 不认识的 AVIF 文件。`scanOnStart=true` 时再额外扫描 `sourceDir`，把新增或变更的文件入队。
 2. **监听**：chokidar 非递归监听源目录，按扩展名白名单过滤，隐藏文件和临时文件自动跳过。
 3. **稳定检测**：编码前轮询文件大小，连续 `stabilizeMs` 毫秒不变才认为写入完成，避免读到未写完的文件。
 4. **编码**：sharp 转 AVIF，先写临时文件再 rename，保证原子性。同一源文件再次变更时，正在进行的编码会被 abort，新任务入队。
