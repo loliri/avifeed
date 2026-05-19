@@ -59,10 +59,19 @@ async function main() {
     if (shuttingDown) return;
     shuttingDown = true;
     log.info({ signal }, 'Shutting down...');
+
+    // Hard-kill after 10 s so a stuck drain/close never blocks exit.
+    const forceExit = setTimeout(() => {
+      log.warn('Shutdown timed out after 10 s, forcing exit');
+      process.exit(1);
+    }, 10_000);
+    forceExit.unref(); // don't let this timer itself keep the process alive
+
     await watcher.stop();
     await optimizer.drain();
     manifest.flushNow();
     await app.close();
+    clearTimeout(forceExit);
     log.info('Shutdown complete');
     process.exit(0);
   };
