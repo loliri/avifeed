@@ -2,7 +2,7 @@
 
 📖 README: **English** | **[简体中文](README.zh.md)**
 
-**avifeed** turns a folder of images into a low-bandwidth random-image endpoint. Drop originals in; the server transcodes them to AVIF in the background, keeps itself in sync as files come and go, and serves a different one on every `GET /` — at a fraction of the bytes.
+**avifeed** is a Node.js HTTP server that turns a folder of images into a low-bandwidth random-image endpoint. Drop originals in; the server transcodes them to AVIF in the background, keeps itself in sync as files come and go.
 
 What makes it different from a one-line "pick a random file" script:
 
