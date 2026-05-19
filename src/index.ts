@@ -23,15 +23,15 @@ async function main() {
   await bootstrap(cfg, manifest, optimizer);
 
   // Wire watcher events to optimizer
-  watcher.on('job', (sourcePath: string) => optimizer.enqueue(sourcePath));
-  watcher.on('remove', (sourcePath: string) => {
-    const entry = manifest.getBySourcePath(sourcePath);
+  watcher.on('job', (sourceName: string) => optimizer.enqueue(sourceName));
+  watcher.on('remove', (sourceName: string) => {
+    const entry = manifest.getBySourceName(sourceName);
     if (entry) {
       const optimizedPath = path.join(cfg.optimizedDir, entry.optimizedFilename);
       try { safefs.unlinkSync(optimizedPath); } catch { /* already gone */ }
       log.info({ file: entry.optimizedFilename }, 'Deleted optimized file for removed source');
     }
-    manifest.removeBySourcePath(sourcePath);
+    manifest.removeBySourceName(sourceName);
     manifest.flushNow();
   });
 

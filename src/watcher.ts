@@ -20,8 +20,10 @@ export function shouldHandle(filename: string): boolean {
 }
 
 export interface WatcherEvents {
-  job: [sourcePath: string];
-  remove: [sourcePath: string];
+  // sourceName is the basename of the file inside cfg.sourceDir.
+  // The directory is implicit (always cfg.sourceDir at the time of the event).
+  job: [sourceName: string];
+  remove: [sourceName: string];
 }
 
 export class FileWatcher extends EventEmitter<WatcherEvents> {
@@ -41,22 +43,25 @@ export class FileWatcher extends EventEmitter<WatcherEvents> {
 
     this.watcher.on('add', (filePath: string) => {
       if (shouldHandle(filePath)) {
-        log.debug({ filePath }, 'Watcher: add');
-        this.emit('job', filePath);
+        const sourceName = path.basename(filePath);
+        log.debug({ sourceName }, 'Watcher: add');
+        this.emit('job', sourceName);
       }
     });
 
     this.watcher.on('change', (filePath: string) => {
       if (shouldHandle(filePath)) {
-        log.debug({ filePath }, 'Watcher: change');
-        this.emit('job', filePath);
+        const sourceName = path.basename(filePath);
+        log.debug({ sourceName }, 'Watcher: change');
+        this.emit('job', sourceName);
       }
     });
 
     this.watcher.on('unlink', (filePath: string) => {
       if (shouldHandle(filePath)) {
-        log.debug({ filePath }, 'Watcher: unlink');
-        this.emit('remove', filePath);
+        const sourceName = path.basename(filePath);
+        log.debug({ sourceName }, 'Watcher: unlink');
+        this.emit('remove', sourceName);
       }
     });
 

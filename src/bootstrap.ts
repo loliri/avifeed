@@ -12,7 +12,7 @@ export async function bootstrap(
   manifest: AssetManifest,
   optimizer: ImageOptimizer,
 ): Promise<void> {
-  // Step 1: Load manifest from disk
+  // Step 1: Load manifest from disk (handles v1 → v2 migration internally).
   try {
     const raw = fs.readFileSync(cfg.manifestPath, 'utf8');
     manifest.fromJSON(JSON.parse(raw));
@@ -23,10 +23,57 @@ export async function bootstrap(
     }
   }
 
-  // Step 2: Clean up optimizedDir — always runs regardless of scanOnStart.
-  // sourceDir is never touched here; only optimizedDir is inspected/modified.
+  // Step 2: Reconcile against the *current* sourceDir.
+  //
+  // The manifest is sourceDir-relative (entries keyed by basename). The
+  // current sourceDir is the only authority on what should exist — files
+  // that aren't there now must be evicted, even if their optimized .avif
+  // happens to still be on disk. This prevents pollution when sourceDir
+  // is repointed at a different folder.
+  let sourceFilesArr: string[] | null;
+  try {
+    sourceFilesArr = fs.readdirSync(cfg.sourceDir);
+  } catch (err) {
+    log.warn({ err, sourceDir: cfg.sourceDir }, 'Failed to read source directory during bootstrap');
+    sourceFilesArr = null;
+  }
 
-  // 2a. Manifest entry whose avif file is gone → remove the entry
+  if (sourceFilesArr !== null) {
+    const presentSources = new Set(sourceFilesArr.filter(shouldHandle));
+
+    // 2a. Drop manifest entries whose source isn't in the current sourceDir,
+    //     and delete the corresponding optimized file.
+    for (const entry of [...manifest.allEntries()]) {
+      if (!presentSources.has(entry.sourceName)) {
+        const stalePath = path.join(cfg.optimizedDir, entry.optimizedFilename);
+        try {
+          safefs.unlinkSync(stalePath);
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+            log.warn({ err, file: entry.optimizedFilename }, 'Failed to delete stale optimized file');
+          }
+        }
+        manifest.removeBySourceName(entry.sourceName);
+        log.info({
+          sourceName: entry.sourceName,
+          optimizedFilename: entry.optimizedFilename,
+        }, 'Evicted entry: source not in current sourceDir');
+      }
+    }
+  } else {
+    // We couldn't list sourceDir at all — fall back to the previous, more
+    // forgiving rule: only drop entries whose optimized file is missing.
+    for (const entry of [...manifest.allEntries()]) {
+      const optimizedPath = path.join(cfg.optimizedDir, entry.optimizedFilename);
+      if (!fs.existsSync(optimizedPath)) {
+        log.info({ file: entry.optimizedFilename }, 'Removing orphan manifest entry (optimized file missing)');
+        manifest.removeByOptimizedFilename(entry.optimizedFilename);
+      }
+    }
+  }
+
+  // 2b. Also drop manifest entries whose optimized file is gone on disk
+  //     (e.g. someone deleted from optimizedDir manually).
   for (const entry of [...manifest.allEntries()]) {
     const optimizedPath = path.join(cfg.optimizedDir, entry.optimizedFilename);
     if (!fs.existsSync(optimizedPath)) {
@@ -35,7 +82,7 @@ export async function bootstrap(
     }
   }
 
-  // 2b. avif file on disk that has no manifest entry → delete the file
+  // 2c. avif file on disk that has no manifest entry → delete the file.
   let optimizedFiles: string[];
   try {
     optimizedFiles = fs.readdirSync(cfg.optimizedDir);
@@ -58,14 +105,7 @@ export async function bootstrap(
   // With scanOnStart=false the server trusts the manifest as-is and relies
   // on the watcher to pick up changes at runtime.
   if (cfg.scanOnStart) {
-    let sourceFiles: string[];
-    try {
-      sourceFiles = fs.readdirSync(cfg.sourceDir);
-    } catch (err) {
-      log.warn({ err }, 'Failed to read source directory during bootstrap');
-      sourceFiles = [];
-    }
-
+    const sourceFiles = sourceFilesArr ?? [];
     for (const filename of sourceFiles) {
       if (!shouldHandle(filename)) continue;
       const sourcePath = path.join(cfg.sourceDir, filename);
@@ -77,14 +117,14 @@ export async function bootstrap(
         continue;
       }
 
-      const existing = manifest.getBySourcePath(sourcePath);
+      const existing = manifest.getBySourceName(filename);
       if (
         !existing ||
         existing.sourceMtime !== stat.mtimeMs ||
         existing.sourceSize !== stat.size
       ) {
-        log.debug({ sourcePath }, 'Bootstrap: enqueuing for optimization');
-        optimizer.enqueue(sourcePath);
+        log.debug({ sourceName: filename }, 'Bootstrap: enqueuing for optimization');
+        optimizer.enqueue(filename);
       }
     }
   } else {

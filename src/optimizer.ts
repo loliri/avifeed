@@ -15,7 +15,7 @@ function fmtBytes(n: number): string {
 }
 
 interface PendingJob {
-  sourcePath: string;
+  sourceName: string;
   controller: AbortController;
 }
 
@@ -32,17 +32,17 @@ export class ImageOptimizer {
     this.manifest = manifest;
   }
 
-  enqueue(sourcePath: string): void {
-    // Cancel a currently-running job for the same path so we don't
+  enqueue(sourceName: string): void {
+    // Cancel a currently-running job for the same name so we don't
     // waste CPU finishing an encode whose source has already changed.
-    if (this.currentJob && this.currentJob.sourcePath === sourcePath) {
+    if (this.currentJob && this.currentJob.sourceName === sourceName) {
       this.currentJob.controller.abort();
     }
-    // Drop any pending duplicates for this path.
-    this.queue = this.queue.filter((j) => j.sourcePath !== sourcePath);
+    // Drop any pending duplicates for this name.
+    this.queue = this.queue.filter((j) => j.sourceName !== sourceName);
 
     const controller = new AbortController();
-    this.queue.push({ sourcePath, controller });
+    this.queue.push({ sourceName, controller });
     this._pump();
   }
 
@@ -59,7 +59,7 @@ export class ImageOptimizer {
       return;
     }
 
-    this._run(job.sourcePath, job.controller.signal).finally(() => {
+    this._run(job.sourceName, job.controller.signal).finally(() => {
       this.currentJob = null;
       this.running = false;
       this._pump();
@@ -68,25 +68,26 @@ export class ImageOptimizer {
 
   async runOnce(
     bytes: Buffer,
-    sourcePath: string,
+    sourceName: string,
     signal?: AbortSignal,
   ): Promise<{ contentHash: string; optimizedFilename: string } | null> {
+    const sourcePath = path.join(this.cfg.sourceDir, sourceName);
     const hash = contentHash(bytes, this.cfg.hashLength);
     if (signal?.aborted) return null;
 
-    const basename = path.basename(sourcePath, path.extname(sourcePath));
+    const basename = path.basename(sourceName, path.extname(sourceName));
     const optimizedFilename = `${basename}.${hash}.avif`;
     const optimizedPath = path.join(this.cfg.optimizedDir, optimizedFilename);
 
-    const existing = this.manifest.getBySourcePath(sourcePath);
+    const existing = this.manifest.getBySourceName(sourceName);
     if (existing && existing.contentHash === hash) {
-      log.debug({ sourcePath, hash }, 'Skipping: content unchanged');
+      log.debug({ sourceName, hash }, 'Skipping: content unchanged');
       return { contentHash: hash, optimizedFilename: existing.optimizedFilename };
     }
 
     if (signal?.aborted) return null;
 
-    log.info({ sourcePath, size: fmtBytes(bytes.length) }, 'Encoding image...');
+    log.info({ sourceName, size: fmtBytes(bytes.length) }, 'Encoding image...');
 
     let avifBytes: Buffer;
     try {
@@ -94,7 +95,7 @@ export class ImageOptimizer {
         .avif({ quality: this.cfg.avifQuality, effort: this.cfg.avifEffort })
         .toBuffer();
     } catch (err) {
-      log.warn({ err, sourcePath }, 'Failed to encode image, skipping');
+      log.warn({ err, sourceName }, 'Failed to encode image, skipping');
       return null;
     }
 
@@ -112,7 +113,7 @@ export class ImageOptimizer {
         safefs.renameSync(tmp, optimizedPath);
       }
     } catch (err) {
-      log.error({ err, sourcePath, tmp }, 'Failed to write optimized file');
+      log.error({ err, sourceName, tmp }, 'Failed to write optimized file');
       if (this.cfg.asyncIo) {
         await safefs.unlink(tmp).catch(() => {});
       } else {
@@ -131,7 +132,7 @@ export class ImageOptimizer {
     } catch { /* use defaults */ }
 
     // If a previous optimized file existed for the same source, remove it
-    const prev = this.manifest.getBySourcePath(sourcePath);
+    const prev = this.manifest.getBySourceName(sourceName);
     if (prev && prev.optimizedFilename !== optimizedFilename) {
       const stalePath = path.join(this.cfg.optimizedDir, prev.optimizedFilename);
       if (this.cfg.asyncIo) {
@@ -143,7 +144,7 @@ export class ImageOptimizer {
     }
 
     this.manifest.upsert({
-      sourcePath, sourceMtime, sourceSize,
+      sourceName, sourceMtime, sourceSize,
       contentHash: hash, optimizedFilename, optimizedSize: avifBytes.length,
     });
     // Persist immediately: a crash between upsert and the debounced flush
@@ -152,14 +153,15 @@ export class ImageOptimizer {
 
     const pct = Math.round((1 - avifBytes.length / bytes.length) * 100);
     log.info({
-      sourcePath,
+      sourceName,
       optimizedFilename,
       size: `${fmtBytes(bytes.length)} → ${fmtBytes(avifBytes.length)} (↓${pct}%)`,
     }, 'Optimized image');
     return { contentHash: hash, optimizedFilename };
   }
 
-  private async _run(sourcePath: string, signal: AbortSignal): Promise<void> {
+  private async _run(sourceName: string, signal: AbortSignal): Promise<void> {
+    const sourcePath = path.join(this.cfg.sourceDir, sourceName);
     const { stabilizeMs, stabilizePollMs, stabilizeTimeoutMs } = this.cfg;
     const deadline = Date.now() + stabilizeTimeoutMs;
     let prevSize = -1, stableAt = -1;
@@ -193,11 +195,11 @@ export class ImageOptimizer {
         ? await fsp.readFile(sourcePath)
         : fs.readFileSync(sourcePath);
     } catch (err) {
-      log.error({ err, sourcePath }, 'Failed to read source file');
+      log.error({ err, sourceName }, 'Failed to read source file');
       return;
     }
 
-    await this.runOnce(bytes, sourcePath, signal);
+    await this.runOnce(bytes, sourceName, signal);
   }
 
   async drain(): Promise<void> {
