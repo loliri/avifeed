@@ -23,28 +23,40 @@ export async function bootstrap(
     }
   }
 
-  // Step 2: Remove stale entries
-  // 2a. Optimized file missing → orphan
-  // 2b. Source file missing → remove from manifest (source was deleted)
+  // Step 2: Clean up optimizedDir — always runs regardless of scanOnStart.
+  // sourceDir is never touched here; only optimizedDir is inspected/modified.
+
+  // 2a. Manifest entry whose avif file is gone → remove the entry
   for (const entry of [...manifest.allEntries()]) {
     const optimizedPath = path.join(cfg.optimizedDir, entry.optimizedFilename);
     if (!fs.existsSync(optimizedPath)) {
-      log.info({ entry: entry.optimizedFilename }, 'Removing orphan manifest entry (optimized file missing)');
+      log.info({ file: entry.optimizedFilename }, 'Removing orphan manifest entry (optimized file missing)');
       manifest.removeByOptimizedFilename(entry.optimizedFilename);
-      continue;
     }
-    if (!fs.existsSync(entry.sourcePath)) {
-      log.info({ sourcePath: entry.sourcePath }, 'Removing manifest entry (source file deleted)');
-      manifest.removeBySourcePath(entry.sourcePath);
-      // Also delete the optimized file
+  }
+
+  // 2b. avif file on disk that has no manifest entry → delete the file
+  let optimizedFiles: string[];
+  try {
+    optimizedFiles = fs.readdirSync(cfg.optimizedDir);
+  } catch (err) {
+    log.warn({ err }, 'Failed to read optimized directory during bootstrap');
+    optimizedFiles = [];
+  }
+  for (const filename of optimizedFiles) {
+    if (!filename.endsWith('.avif')) continue;
+    if (!manifest.getByOptimizedFilename(filename)) {
+      const stalePath = path.join(cfg.optimizedDir, filename);
       try {
-        safefs.unlinkSync(path.join(cfg.optimizedDir, entry.optimizedFilename));
-        log.info({ file: entry.optimizedFilename }, 'Deleted optimized file for removed source');
+        safefs.unlinkSync(stalePath);
+        log.info({ file: filename }, 'Deleted untracked avif file (not in manifest)');
       } catch { /* already gone */ }
     }
   }
 
-  // Step 3: Scan source directory for new/changed files (skipped if scanOnStart is false)
+  // Step 3: Scan sourceDir for new/changed files — only when scanOnStart=true.
+  // With scanOnStart=false the server trusts the manifest as-is and relies
+  // on the watcher to pick up changes at runtime.
   if (cfg.scanOnStart) {
     let sourceFiles: string[];
     try {

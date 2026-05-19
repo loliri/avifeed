@@ -8,6 +8,12 @@ import { log } from './log.js';
 import * as safefs from './safefs.js';
 import type { ServerConfig } from './config.js';
 
+function fmtBytes(n: number): string {
+  if (n >= 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+  if (n >= 1024) return `${(n / 1024).toFixed(2)} KB`;
+  return `${n} B`;
+}
+
 interface PendingJob {
   sourcePath: string;
   controller: AbortController;
@@ -80,6 +86,8 @@ export class ImageOptimizer {
 
     if (signal?.aborted) return null;
 
+    log.info({ sourcePath, size: fmtBytes(bytes.length) }, 'Encoding image...');
+
     let avifBytes: Buffer;
     try {
       avifBytes = await sharp(bytes)
@@ -142,7 +150,12 @@ export class ImageOptimizer {
     // would leave manifest and disk inconsistent until the next bootstrap.
     this.manifest.flushNow();
 
-    log.info({ sourcePath, optimizedFilename, hash }, 'Optimized image');
+    const pct = Math.round((1 - avifBytes.length / bytes.length) * 100);
+    log.info({
+      sourcePath,
+      optimizedFilename,
+      size: `${fmtBytes(bytes.length)} → ${fmtBytes(avifBytes.length)} (↓${pct}%)`,
+    }, 'Optimized image');
     return { contentHash: hash, optimizedFilename };
   }
 
