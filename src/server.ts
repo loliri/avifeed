@@ -14,7 +14,10 @@ export function buildServer(
   const app = Fastify({ logger: false });
 
   app.addHook('onResponse', async (request, reply) => {
-    log.info({
+    const logFn = reply.statusCode >= 400 ? log.error.bind(log)
+      : reply.statusCode >= 300 ? log.warn.bind(log)
+      : log.debug.bind(log);
+    logFn({
       method: request.method,
       url: request.url,
       status: reply.statusCode,
