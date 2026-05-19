@@ -1,0 +1,61 @@
+[Unit]
+Description=avifeed — random AVIF image server
+Documentation=https://github.com/your-org/randpicnode
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# Adjust user/group and paths to match your install.
+User=avifeed
+Group=avifeed
+WorkingDirectory=/opt/avifeed
+
+# Use absolute path to node so PATH doesn't matter.
+ExecStart=/usr/bin/node /opt/avifeed/dist/index.js
+
+# Environment overrides (optional). Same names as RIS_* env vars.
+Environment=NODE_ENV=production
+Environment=RIS_LOG_LEVEL=info
+# Environment=RIS_CONFIG=/etc/randpicnode/config.json
+# Environment=RIS_PORT=2333
+
+# Restart policy
+Restart=on-failure
+RestartSec=2s
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+# Graceful shutdown — index.ts handles SIGTERM and drains the optimizer queue.
+KillSignal=SIGTERM
+TimeoutStopSec=30s
+
+# Logging to journald (pino writes JSON to stdout).
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=avifeed
+
+# Hardening — relax if your install layout needs it.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/avifeed/images
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+# sharp/libvips needs write+exec memory for some codepaths; leaving MDWE off is safer.
+
+# Resource limits — tune for your hardware.
+LimitNOFILE=65536
+# CPUQuota=200%
+# MemoryMax=1G
+
+[Install]
+WantedBy=multi-user.target

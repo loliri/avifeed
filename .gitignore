@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Test / coverage output
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+
+# Image data — directories are auto-created on startup, ignore contents
+images/source/
+images/optimized/
+images/manifest.json
+
+# User config (copy config.example.json to config.json to customize)
+config.json

@@ -1,0 +1,81 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { loadConfig } from './config.js';
+import { AssetManifest } from './manifest.js';
+import { ImageOptimizer } from './optimizer.js';
+import { FileWatcher } from './watcher.js';
+import { bootstrap } from './bootstrap.js';
+import { buildServer } from './server.js';
+import { log } from './log.js';
+
+async function main() {
+  const cfg = loadConfig();
+
+  const manifest = new AssetManifest(cfg.manifestPath);
+  const optimizer = new ImageOptimizer(cfg, manifest);
+  const watcher = new FileWatcher(cfg);
+
+  // Bootstrap: load manifest, clean orphans, scan source dir
+  await bootstrap(cfg, manifest, optimizer);
+
+  // Wire watcher events to optimizer
+  watcher.on('job', (sourcePath: string) => optimizer.enqueue(sourcePath));
+  watcher.on('remove', (sourcePath: string) => {
+    const entry = manifest.getBySourcePath(sourcePath);
+    if (entry) {
+      const optimizedPath = path.join(cfg.optimizedDir, entry.optimizedFilename);
+      try { fs.unlinkSync(optimizedPath); } catch { /* already gone */ }
+      log.info({ file: entry.optimizedFilename }, 'Deleted optimized file for removed source');
+    }
+    manifest.removeBySourcePath(sourcePath);
+    manifest.flushNow();
+  });
+
+  // Start watcher after bootstrap (only if watch mode enabled)
+  if (cfg.watch) {
+    watcher.start();
+    log.info('File watcher started');
+  } else {
+    log.info('Watch mode disabled — processing source dir on startup only');
+  }
+
+  // Build and start HTTP server
+  const app = buildServer(cfg, manifest, optimizer);
+  try {
+    await app.listen({ port: cfg.port, host: '0.0.0.0' });
+    log.info({ port: cfg.port }, 'Server started');
+  } catch (err) {
+    log.fatal({ err }, 'Failed to start server');
+    process.exit(1);
+  }
+
+  // Graceful shutdown
+  let shuttingDown = false;
+  const shutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    log.info({ signal }, 'Shutting down...');
+    await watcher.stop();
+    await optimizer.drain();
+    manifest.flushNow();
+    await app.close();
+    log.info('Shutdown complete');
+    process.exit(0);
+  };
+
+  process.once('SIGINT', () => void shutdown('SIGINT'));
+  process.once('SIGTERM', () => void shutdown('SIGTERM'));
+
+  process.on('unhandledRejection', (reason) => {
+    log.error({ err: reason }, 'unhandledRejection');
+  });
+  process.on('uncaughtException', (err) => {
+    log.fatal({ err }, 'uncaughtException, shutting down');
+    void shutdown('uncaughtException').catch(() => process.exit(1));
+  });
+}
+
+main().catch((err) => {
+  console.error('Fatal error during startup:', err);
+  process.exit(1);
+});

@@ -1,0 +1,33 @@
+{
+  "name": "avifeed",
+  "version": "0.1.0",
+  "description": "A Node.js random image server that auto-encodes your photos to AVIF and serves them over HTTP.",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "keywords": [
+    "image",
+    "avif",
+    "random",
+    "server"
+  ],
+  "author": "",
+  "license": "ISC",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "chokidar": "^5.0.0",
+    "fastify": "^5.8.5",
+    "pino": "^10.3.1",
+    "pino-pretty": "^13.0.0",
+    "sharp": "^0.34.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.3"
+  }
+}

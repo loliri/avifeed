@@ -1,0 +1,14 @@
+{
+  "port": 2333,
+  "sourceDir": "./images/source",
+  "optimizedDir": "./images/optimized",
+  "manifestPath": "./images/manifest.json",
+  "avifQuality": 50,
+  "avifEffort": 4,
+  "watch": true,
+  "scanOnStart": false,
+  "asyncIo": false,
+  "stabilizeMs": 200,
+  "stabilizePollMs": 50,
+  "stabilizeTimeoutMs": 10000
+}
