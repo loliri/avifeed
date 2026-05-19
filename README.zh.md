@@ -1,21 +1,8 @@
 # avifeed
 
+📖 README: **[English](README.md)** | **简体中文**
+
 **avifeed** 是一个 Node.js HTTP 服务器，监听一个图片目录，自动把图片转码为 [AVIF](https://aomediacodec.github.io/av1-avif/) 格式，每次请求随机返回一张。
-
-> English documentation: [README.md](README.md)
-
----
-
-## 为什么用 AVIF？
-
-AVIF（AV1 图像文件格式）是目前主流浏览器中压缩率最高的图片格式：
-
-- **比 JPEG 小 30–50%**，视觉质量相当
-- **比 WebP 更好**，在复杂渐变和细节上表现更优
-- 原生支持 **HDR 和宽色域**
-- Chrome、Firefox、Safari 16+、所有现代移动浏览器均原生支持
-
-用 AVIF 意味着更少的带宽、更快的加载速度、更低的存储成本，且肉眼看不出质量差异。
 
 ---
 
@@ -93,6 +80,14 @@ npm start
 
 ---
 
+## 部署
+
+`deploy/` 目录下有一个带基础 hardening 的 systemd unit，安装步骤见 [`deploy/README.md`](deploy/README.md)。
+
+建议放在反向代理（nginx、caddy）后面处理 TLS 和限速。
+
+---
+
 ## 工作原理
 
 1. **启动清理**：读取 manifest，删除优化文件已不存在的条目，清理源文件已删除的条目。`scanOnStart=true` 时完整扫描源目录。
@@ -103,27 +98,16 @@ npm start
 
 ---
 
-## 部署
+## 为什么用 AVIF？
 
-`deploy/` 目录下有一个带基础 hardening 的 systemd unit，安装步骤见 [`deploy/README.md`](deploy/README.md)。
+AVIF（AV1 图像文件格式）是目前主流浏览器中压缩率最高的图片格式：
 
-建议放在反向代理（nginx、caddy）后面处理 TLS 和限速。
+- **比 JPEG 小 30–50%**，视觉质量相当
+- **比 WebP 更好**，在复杂渐变和细节上表现更优
+- 原生支持 **HDR 和宽色域**
+- Chrome、Firefox、Safari 16+、所有现代移动浏览器均原生支持
 
----
-
-## GitHub 仓库信息填写建议
-
-| 字段 | 建议内容 |
-| --- | --- |
-| **仓库名** | `avifeed` |
-| **描述 (Description)** | A Node.js random image server that auto-encodes photos to AVIF and serves them over HTTP |
-| **Topics / 标签** | `nodejs` `avif` `image-server` `fastify` `sharp` `self-hosted` |
-| **Website** | 你的部署地址，例如 `https://img.example.com` |
-| **Social preview** | 用一张 AVIF 输出图作为预览图效果不错 |
-
-可选的 `.github/` 补充：
-- `ISSUE_TEMPLATE` — bug 报告 + 功能请求模板
-- `FUNDING.yml` — 赞助链接
+用 AVIF 意味着更少的带宽、更快的加载速度、更低的存储成本，且肉眼看不出质量差异。
 
 ---
 

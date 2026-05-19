@@ -6,19 +6,6 @@
 
 ---
 
-## Why AVIF?
-
-AVIF (AV1 Image File Format) is the most efficient widely-supported image format today:
-
-- **30–50 % smaller** than JPEG at equivalent visual quality
-- **Better than WebP** on complex gradients and fine detail
-- **HDR and wide-gamut** support built in
-- Supported natively in Chrome, Firefox, Safari 16+, and all modern mobile browsers
-
-Serving AVIF means less bandwidth, faster page loads, and lower storage costs — with no visible quality loss.
-
----
-
 ## Features
 
 - Drop images into a folder → they are encoded to AVIF automatically
@@ -93,6 +80,14 @@ Copy `config.example.json` to `config.json` and edit. Every field also has an `R
 
 ---
 
+## Deployment
+
+A hardened systemd unit is in [`deploy/avifeed.service`](deploy/avifeed.service). See [`deploy/README.md`](deploy/README.md) for installation steps.
+
+Run behind a reverse proxy (nginx, caddy) for TLS and rate limiting.
+
+---
+
 ## How it works
 
 1. **Bootstrap** — loads the manifest, removes entries whose optimized file is gone, cleans up entries whose source was deleted. Optionally scans the full source directory.
@@ -103,29 +98,16 @@ Copy `config.example.json` to `config.json` and edit. Every field also has an `R
 
 ---
 
-## Deployment
+## Why AVIF?
 
-A hardened systemd unit is in [`deploy/randpicnode.service`](deploy/randpicnode.service). See [`deploy/README.md`](deploy/README.md) for installation steps.
+AVIF (AV1 Image File Format) is the most efficient widely-supported image format today:
 
-Run behind a reverse proxy (nginx, caddy) for TLS and rate limiting.
+- **30–50 % smaller** than JPEG at equivalent visual quality
+- **Better than WebP** on complex gradients and fine detail
+- **HDR and wide-gamut** support built in
+- Supported natively in Chrome, Firefox, Safari 16+, and all modern mobile browsers
 
----
-
-## GitHub repository setup
-
-Suggested fields when creating the repo:
-
-| Field | Value |
-| --- | --- |
-| **Repository name** | `avifeed` |
-| **Description** | A Node.js random image server that auto-encodes photos to AVIF and serves them over HTTP |
-| **Topics / tags** | `nodejs` `avif` `image-server` `fastify` `sharp` `self-hosted` |
-| **Website** | your deployment URL, e.g. `https://img.example.com` |
-| **Social preview** | a sample AVIF output works well |
-
-Recommended `.github/` additions:
-- `ISSUE_TEMPLATE` — bug report + feature request
-- `FUNDING.yml` — if you want sponsorship links
+Serving AVIF means less bandwidth, faster page loads, and lower storage costs — with no visible quality loss.
 
 ---
 
