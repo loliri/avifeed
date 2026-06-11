@@ -1,6 +1,6 @@
 {
   "name": "avifeed",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "A Node.js random image server that auto-encodes your photos to AVIF and serves them over HTTP.",
   "type": "module",
   "main": "dist/index.js",
@@ -15,7 +15,7 @@
     "server"
   ],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "engines": {
     "node": ">=20"
   },

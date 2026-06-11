@@ -172,4 +172,4 @@ config.example.json
 
 ## License
 
-ISC
+MIT
