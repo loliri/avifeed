@@ -41,6 +41,15 @@ export async function bootstrap(
   if (sourceFilesArr !== null) {
     const presentSources = new Set(sourceFilesArr.filter(shouldHandle));
 
+    if (presentSources.size === 0 && manifest.size > 0) {
+      log.warn(
+        { sourceDir: cfg.sourceDir, entries: manifest.size },
+        'sourceDir listing is empty but the manifest has entries — they will all be ' +
+        'evicted. If sourceDir lives on a volume that is not mounted, stop the server ' +
+        'now to keep the optimized cache.',
+      );
+    }
+
     // 2a. Drop manifest entries whose source isn't in the current sourceDir,
     //     and delete the corresponding optimized file.
     for (const entry of [...manifest.allEntries()]) {

@@ -2,6 +2,11 @@
 Description=avifeed — random AVIF image server
 After=network-online.target
 Wants=network-online.target
+# If sourceDir lives on a mounted volume (e.g. an HDD), uncomment and set its
+# absolute path: systemd then refuses to start the service until the mount is
+# active, preventing startup from treating an unmounted sourceDir as empty and
+# evicting the whole manifest.
+# RequiresMountsFor=/mnt/your-images
 
 [Service]
 Type=simple
