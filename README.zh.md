@@ -93,25 +93,27 @@ npm start
 每次启动，无论 `scanOnStart` 是什么值：
 
 - 都会从磁盘读取 manifest。
+- 都会 `readdir` 列一次 `sourceDir`，凡是不在当前 `sourceDir` 里的 manifest 条目，连同它对应的 AVIF 文件一起清退（保证换 `sourceDir` 不留旧数据）。
 - 都会双向对账 `optimizedDir`：
   - manifest 里有记录但 AVIF 文件已不存在 → 删该条记录；
   - `optimizedDir` 里有 AVIF 文件但 manifest 没记录 → 删该 AVIF 文件。
-- **完全不读、不 stat、不碰 `sourceDir`**。（这点对源目录在慢速磁盘 / 可移动盘 / 网络盘上、启动时可能还没就绪的场景很有用。）
+- 不会 `stat` 任何源文件，也不会读取源文件内容。
 
 `scanOnStart=true` 时，额外执行：
 
-- 列出 `sourceDir` 下所有图片文件并 `stat` 一遍。
+- 逐个 `stat` `sourceDir` 下的图片文件。
 - 凡是 manifest 里没有的、或者大小/修改时间和 manifest 记录不一致的文件，都入队等待编码。
 
 `scanOnStart=false`（默认）时：
 
-- 启动期完全不碰 `sourceDir`。服务运行起来后，新增/变更只能靠 watcher 捕获。**服务停机期间放进去的文件**不会被自动处理，需要再次 touch（修改）一下才会触发编码。
+- 不会 `stat` 任何源文件。服务运行起来后，新增/变更只能靠 watcher 捕获。**服务停机期间放进去的文件**不会被自动处理，需要再次 touch（修改）一下才会触发编码。
+- 注意：如果 `sourceDir` 在尚未挂载的卷上（比如机械盘还没就绪），启动会把它当成空目录并清退全部条目——源目录在挂载卷上时，建议在 systemd unit 里配置 `RequiresMountsFor=`。
 
 ---
 
 ## 部署
 
-`deploy/` 目录下有一个带基础 hardening 的 systemd unit，安装步骤见 [`deploy/README.md`](deploy/README.md)。
+`deploy/` 目录下有一个面向个人自部署的简化版 systemd unit，安装步骤见 [`deploy/README.md`](deploy/README.md)。
 
 建议放在反向代理（nginx、caddy）后面处理 TLS 和限速。
 
@@ -119,17 +121,17 @@ npm start
 
 ## 工作原理
 
-1. **启动清理**：读取 manifest，与 `optimizedDir` 双向对账：删掉 AVIF 已不存在的 manifest 条目，删掉 manifest 不认识的 AVIF 文件。`scanOnStart=true` 时再额外扫描 `sourceDir`，把新增或变更的文件入队。
+1. **启动清理**：读取 manifest，用当前 `sourceDir` 的目录列表清退不在其中的条目（含对应 AVIF），再与 `optimizedDir` 双向对账：删掉 AVIF 已不存在的 manifest 条目，删掉 manifest 不认识的 AVIF 文件。`scanOnStart=true` 时再额外扫描 `sourceDir`，把新增或变更的文件入队。
 2. **监听**：chokidar 非递归监听源目录，按扩展名白名单过滤，隐藏文件和临时文件自动跳过。
 3. **稳定检测**：编码前轮询文件大小，连续 `stabilizeMs` 毫秒不变才认为写入完成，避免读到未写完的文件。
-4. **编码**：sharp 转 AVIF，先写临时文件再 rename，保证原子性。同一源文件再次变更时，正在进行的编码会被 abort，新任务入队。
+4. **编码**：sharp 转 AVIF，先写临时文件再 rename，保证原子性。同一源文件再次变更或被删除时，正在进行的编码会在关键检查点中止并丢弃结果（编码本身不可打断），新任务入队重做。
 5. **持久化**：每次 manifest 变更后立即同步落盘（tmp 文件 + rename），崩溃不会留下不一致状态。
 
 ---
 
 ## 源目录是只读的
 
-avifeed 把 `sourceDir` 当作严格**只读**输入：服务端只对源目录里的文件做 `stat`、读取、监听，**绝不会**创建、重命名、删除或修改源文件。所有写操作都只发生在 `optimizedDir` 和 `manifestPath` 上。
+avifeed 把 `sourceDir` 当作严格**只读**输入：服务端只对源目录里的文件做 `stat`、读取、监听，**绝不会**重命名、删除或修改源文件。所有写操作都只发生在 `optimizedDir` 和 `manifestPath` 上。唯一的例外是启动时会用 `mkdirSync` 确保 `sourceDir` 目录存在（对已存在的目录不做任何事），不会触碰目录内的文件。
 
 这一约束不只是口头约定，而是在运行时强制执行的。代码里所有文件系统写操作都走一个小封装（`src/safefs.ts`），它会解析目标路径，如果不在启动时登记的可写根目录（`optimizedDir` 以及 `manifestPath` 所在目录）下，会直接抛出 `EWRITEFORBIDDEN` 错误。今后哪怕有人改错代码、不小心把写操作指向了 `sourceDir`，也会立即报错，不会悄悄破坏你的原图。
 
