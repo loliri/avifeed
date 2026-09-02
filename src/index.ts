@@ -73,7 +73,9 @@ async function main() {
     await app.close();
     clearTimeout(forceExit);
     log.info('Shutdown complete');
-    process.exit(0);
+    // Crash-triggered shutdowns exit non-zero so Restart=on-failure actually
+    // restarts the service; signal-triggered shutdowns stay 0.
+    process.exit(signal === 'uncaughtException' ? 1 : 0);
   };
 
   process.once('SIGINT', () => void shutdown('SIGINT'));
