@@ -37,7 +37,6 @@ interface LegacyEntryV1 {
 export class AssetManifest {
   private entries: ManifestEntry[] = [];
   private bySourceName = new Map<string, number>();
-  private byContentHash = new Map<string, number>();
   private byOptimizedFilename = new Map<string, number>();
 
   private manifestPath: string;
@@ -56,17 +55,14 @@ export class AssetManifest {
     const existing = this.bySourceName.get(entry.sourceName);
     if (existing !== undefined) {
       const old = this.entries[existing]!;
-      this.byContentHash.delete(old.contentHash);
       this.byOptimizedFilename.delete(old.optimizedFilename);
       this.entries[existing] = entry;
-      this.byContentHash.set(entry.contentHash, existing);
       this.byOptimizedFilename.set(entry.optimizedFilename, existing);
       this.bySourceName.set(entry.sourceName, existing);
     } else {
       const idx = this.entries.length;
       this.entries.push(entry);
       this.bySourceName.set(entry.sourceName, idx);
-      this.byContentHash.set(entry.contentHash, idx);
       this.byOptimizedFilename.set(entry.optimizedFilename, idx);
     }
     this.schedulePersist();
@@ -126,7 +122,6 @@ export class AssetManifest {
 
     this.entries = [];
     this.bySourceName.clear();
-    this.byContentHash.clear();
     this.byOptimizedFilename.clear();
 
     const isV1 = obj.version === 1;
@@ -170,7 +165,6 @@ export class AssetManifest {
       const idx = this.entries.length;
       this.entries.push(entry);
       this.bySourceName.set(entry.sourceName, idx);
-      this.byContentHash.set(entry.contentHash, idx);
       this.byOptimizedFilename.set(entry.optimizedFilename, idx);
     }
 
@@ -184,14 +178,12 @@ export class AssetManifest {
   private _removeAtIndex(idx: number): void {
     const entry = this.entries[idx]!;
     this.bySourceName.delete(entry.sourceName);
-    this.byContentHash.delete(entry.contentHash);
     this.byOptimizedFilename.delete(entry.optimizedFilename);
 
     const last = this.entries[this.entries.length - 1]!;
     if (idx !== this.entries.length - 1) {
       this.entries[idx] = last;
       this.bySourceName.set(last.sourceName, idx);
-      this.byContentHash.set(last.contentHash, idx);
       this.byOptimizedFilename.set(last.optimizedFilename, idx);
     }
     this.entries.pop();

@@ -10,7 +10,6 @@ export interface ServerConfig {
   hashLength: number;
   avifQuality: number;
   avifEffort: number;
-  fairnessMultiplier: number;
   watch: boolean;
   scanOnStart: boolean;
   asyncIo: boolean;
@@ -94,9 +93,6 @@ export function loadConfig(): ServerConfig {
 
   const hashLength = parseIntEnv('RIS_HASH_LENGTH', process.env['RIS_HASH_LENGTH'], 8, 4, 64);
 
-  const fairnessMultiplier = parseIntEnv(
-    'RIS_FAIRNESS_MULTIPLIER', process.env['RIS_FAIRNESS_MULTIPLIER'], 10, 1, 1000);
-
   // watch: env var "0"/"false" → off, config.json watch:false → off, default on
   const watchEnv = process.env['RIS_WATCH'];
   const watch = watchEnv !== undefined
@@ -144,5 +140,5 @@ export function loadConfig(): ServerConfig {
     }
   }
 
-  return { port, sourceDir, optimizedDir, manifestPath, hashLength, avifQuality, avifEffort, fairnessMultiplier, watch, scanOnStart, asyncIo, stabilizeMs, stabilizePollMs, stabilizeTimeoutMs };
+  return { port, sourceDir, optimizedDir, manifestPath, hashLength, avifQuality, avifEffort, watch, scanOnStart, asyncIo, stabilizeMs, stabilizePollMs, stabilizeTimeoutMs };
 }

@@ -69,16 +69,6 @@ export async function bootstrap(
         }, 'Evicted entry: source not in current sourceDir');
       }
     }
-  } else {
-    // We couldn't list sourceDir at all — fall back to the previous, more
-    // forgiving rule: only drop entries whose optimized file is missing.
-    for (const entry of [...manifest.allEntries()]) {
-      const optimizedPath = path.join(cfg.optimizedDir, entry.optimizedFilename);
-      if (!fs.existsSync(optimizedPath)) {
-        log.info({ file: entry.optimizedFilename }, 'Removing orphan manifest entry (optimized file missing)');
-        manifest.removeByOptimizedFilename(entry.optimizedFilename);
-      }
-    }
   }
 
   // 2b. Also drop manifest entries whose optimized file is gone on disk
