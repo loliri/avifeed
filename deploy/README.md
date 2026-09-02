@@ -3,8 +3,8 @@
 ## 构建项目
 
 ```bash
-pnpm install
-pnpm build
+npm install
+npm run build
 ```
 
 ## 注册 systemd 服务
