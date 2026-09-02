@@ -93,25 +93,27 @@ This flag controls **whether `sourceDir` is scanned at startup**. It does *not* 
 On every startup, regardless of `scanOnStart`:
 
 - The manifest is loaded from disk.
+- `sourceDir` is listed once with `readdir`; any manifest entry not present in the current `sourceDir` is evicted together with its AVIF file (so repointing `sourceDir` leaves no stale data).
 - `optimizedDir` is reconciled with the manifest in both directions:
   - manifest entry whose AVIF file is missing → entry is dropped;
   - AVIF file on disk that has no manifest entry → file is deleted.
-- `sourceDir` is **not** read or stat'd — it is left completely untouched. (Useful if `sourceDir` lives on a slow / removable / network volume that may not be ready at boot.)
+- No source file is `stat`'d or read.
 
 When `scanOnStart=true`, additionally:
 
-- `sourceDir` is listed and each image file is `stat`'d.
+- Each image file in `sourceDir` is `stat`'d.
 - Any file that is new, or whose size/mtime differs from the manifest, is enqueued for encoding.
 
 When `scanOnStart=false` (default):
 
-- `sourceDir` is never touched at startup. The watcher is solely responsible for picking up changes once the server is running. Files added while the server was down will not be processed until they are touched again.
+- No source file is `stat`'d. The watcher is solely responsible for picking up changes once the server is running. Files added while the server was down will not be processed until they are touched again.
+- Note: if `sourceDir` lives on a volume that is not mounted yet (e.g. an HDD that is not ready), startup treats it as an empty directory and evicts every entry — configure `RequiresMountsFor=` in the systemd unit when `sourceDir` is on a mount.
 
 ---
 
 ## Deployment
 
-A hardened systemd unit is in [`deploy/avifeed.service`](deploy/avifeed.service). See [`deploy/README.md`](deploy/README.md) for installation steps.
+A simplified systemd unit for personal self-hosted deployments is in [`deploy/avifeed.service`](deploy/avifeed.service). See [`deploy/README.md`](deploy/README.md) for installation steps.
 
 Run behind a reverse proxy (nginx, caddy) for TLS and rate limiting.
 
@@ -119,17 +121,17 @@ Run behind a reverse proxy (nginx, caddy) for TLS and rate limiting.
 
 ## How it works
 
-1. **Bootstrap** — loads the manifest, then reconciles `optimizedDir` against it: drops manifest entries whose AVIF is gone, deletes AVIF files that the manifest doesn't know about. If `scanOnStart=true`, additionally scans `sourceDir` for new or changed files and enqueues them.
+1. **Bootstrap** — loads the manifest, evicts entries absent from the current `sourceDir` listing (together with their AVIF files), then reconciles `optimizedDir` against it: drops manifest entries whose AVIF is gone, deletes AVIF files that the manifest doesn't know about. If `scanOnStart=true`, additionally scans `sourceDir` for new or changed files and enqueues them.
 2. **Watch** — chokidar monitors the source directory (non-recursive). Only recognised image extensions are processed; hidden files and temp files are ignored.
 3. **Stabilize** — before encoding, the optimizer polls the file size until it stays constant for `stabilizeMs` ms, avoiding reads on half-written uploads.
-4. **Encode** — sharp converts the source to AVIF and writes it atomically (temp file → rename). If the same source file changes again while encoding, the in-flight job is aborted and a new one is queued.
+4. **Encode** — sharp converts the source to AVIF and writes it atomically (temp file → rename). If the same source file changes again or is deleted while encoding, the in-flight job is stopped at the next checkpoint and its result discarded (the encode itself cannot be interrupted); a new job is queued.
 5. **Persist** — the manifest is written synchronously via tmp-file + rename after every change, so a crash leaves no inconsistency.
 
 ---
 
 ## Source directory is read-only
 
-avifeed treats `sourceDir` as a strictly **read-only** input. The server only `stat`s, reads, and watches files there — it never creates, renames, deletes, or modifies source files. All writes go to `optimizedDir` and `manifestPath`.
+avifeed treats `sourceDir` as a strictly **read-only** input. The server only `stat`s, reads, and watches files there — it never renames, deletes, or modifies source files. All writes go to `optimizedDir` and `manifestPath`. The one exception: at startup, `mkdirSync` ensures the `sourceDir` directory exists (a no-op for an existing directory) and never touches files inside it.
 
 This is enforced at runtime, not just by convention. Every filesystem write in the codebase goes through a small wrapper (`src/safefs.ts`) that resolves the target path and rejects it with `EWRITEFORBIDDEN` unless it sits under one of the writable roots registered at startup (`optimizedDir` and the directory containing `manifestPath`). A future code change that accidentally tries to write inside `sourceDir` will throw immediately rather than silently mutate your originals.
 

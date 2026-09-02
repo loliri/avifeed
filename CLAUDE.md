@@ -22,7 +22,6 @@ avifeed 是一个 Node.js 随机图床：监听 sourceDir → sharp 转 AVIF →
 - sharp 解不了的源文件（如 12-bit AVIF，预构建 libheif 的限制）→ warn + 跳过。
 - 大图编码 1–2 分钟属正常；`Encoding image...` 和 `size: 原 → 现 (↓%)` 两条日志是刻意的「还活着」信号，勿删。
 - 请求日志分级（2xx debug / 3xx warn / 4xx、5xx error）是刻意设计。
-- README 的 scanOnStart 详解声称 `false` 时「完全不碰 sourceDir」，与代码不符（会 readdir 一次）——已知文档漂移，以代码为准。
 
 ## 已否决方向（勿再提议）
 
