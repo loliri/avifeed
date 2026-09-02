@@ -10,7 +10,7 @@ avifeed 是一个 Node.js 随机图床：监听 sourceDir → sharp 转 AVIF →
 
 ## 不变量（改代码前必读）
 
-1. **sourceDir 运行时只读**。所有文件写操作必须走 `src/safefs.ts`，可写根只有 optimizedDir 和 manifestPath 所在目录，注册前 fail-closed。需要新可写根用 `initSafeFs` 注册并说明理由，不许绕过守卫。`config.ts` 启动期的 `mkdirSync` 在注册前执行，属刻意豁免。
+1. **sourceDir 运行时只读**。所有文件写操作必须走 `src/safefs.ts`，可写根只有 optimizedDir 和 manifestPath 所在目录，且 sourceDir 额外注册为禁区（deny 优先于 allow，防默认布局下 `dirname(manifestPath)` 是 sourceDir 父目录导致守卫失效），注册前 fail-closed。需要新可写根用 `initSafeFs` 注册并说明理由，不许绕过守卫。`config.ts` 启动期的 `mkdirSync` 在注册前执行，属刻意豁免。
 2. **manifest 只存 basename（v2）**，不存绝对路径；v1 落盘格式由 `fromJSON` 自动迁移。需要 source 绝对路径时临时 `path.join(cfg.sourceDir, sourceName)`。
 3. **manifest 落盘原子**（tmp + rename），每次变更后立即 flushNow，不依赖 debounce。
 4. **启动对账**：optimizedDir 与 manifest 双向一致，外加「不在当前 sourceDir 的条目」清退。无论 `scanOnStart` 真假都会 `readdir` sourceDir 一次；只有 `true` 才额外逐文件 stat 入队。「启动零接触 sourceDir」与「换目录不污染」二者取后者，是既定妥协。

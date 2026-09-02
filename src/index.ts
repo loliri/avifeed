@@ -13,7 +13,7 @@ async function main() {
 
   // Register writable roots BEFORE any module performs filesystem writes.
   // This enforces the invariant that the source directory is read-only.
-  safefs.initSafeFs([cfg.optimizedDir, path.dirname(cfg.manifestPath)]);
+  safefs.initSafeFs([cfg.optimizedDir, path.dirname(cfg.manifestPath)], [cfg.sourceDir]);
 
   const manifest = new AssetManifest(cfg.manifestPath);
   const optimizer = new ImageOptimizer(cfg, manifest);
