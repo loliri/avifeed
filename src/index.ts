@@ -25,6 +25,9 @@ async function main() {
   // Wire watcher events to optimizer
   watcher.on('job', (sourceName: string) => optimizer.enqueue(sourceName));
   watcher.on('remove', (sourceName: string) => {
+    // Stop any in-flight encode for this source before removing its entry,
+    // or the job would resurrect it via upsert on completion.
+    optimizer.cancel(sourceName);
     const entry = manifest.getBySourceName(sourceName);
     if (entry) {
       const optimizedPath = path.join(cfg.optimizedDir, entry.optimizedFilename);

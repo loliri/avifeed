@@ -46,6 +46,16 @@ export class ImageOptimizer {
     this._pump();
   }
 
+  /** Abort the running job and any queued jobs for this source. */
+  cancel(sourceName: string): void {
+    if (this.currentJob && this.currentJob.sourceName === sourceName) {
+      this.currentJob.controller.abort();
+    }
+    for (const job of this.queue) {
+      if (job.sourceName === sourceName) job.controller.abort();
+    }
+  }
+
   private _pump(): void {
     if (this.running || this.queue.length === 0) return;
     this.running = true;
@@ -142,6 +152,11 @@ export class ImageOptimizer {
       }
       log.info({ file: prev.optimizedFilename }, 'Removed stale optimized file for re-encoded source');
     }
+
+    // The source may have been deleted (or superseded by a newer job) while
+    // the encode was running; one last abort check keeps a removed source
+    // from resurrecting its manifest entry.
+    if (signal?.aborted) return null;
 
     this.manifest.upsert({
       sourceName, sourceMtime, sourceSize,
